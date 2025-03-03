@@ -1,8 +1,10 @@
 import { action, runInAction } from 'mobx';
-import { LoadRecord, GPS, state } from './state';
+import { GPS, LoadRecord, state, State } from './state';
 import { sheets, drive } from '@aultfarms/google';
 import JSZip from 'jszip';
 import * as toGeoJSON from '@tmcw/togeojson';
+import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
+import { point, polygon } from '@turf/helpers';
 import debug from 'debug';
 import { getCurrentGPSFromBrowser } from '../util';
 
@@ -305,13 +307,47 @@ export const toggleConfigModal = action('toggleConfigModal', () => {
   state.config.modalOpen = !state.config.modalOpen;
 });
 
+export const snackbarMessage = action('snackbarMessage', (message: string) => {
+  state.snackbar.open = true;
+  state.snackbar.message = message;
+  info('Snackbar: ', message);
+});
+export const closeSnackbar = action('closeSnackbar', () => {
+  state.snackbar.open = false;
+});
+
 //---------------------
-// GPS
+// GPS and Map
 //---------------------
 
-export const updateCurrentGPS = action('updateCurrentGPS', async () => {
-  const coords = await getCurrentGPSFromBrowser();
-  runInAction(() => state.currentGPS = coords);
+let _latestBrowserGPS : GPS = { lat: 0, lon: 0 };
+export const currentGPS = action('currentGPS', async (coords: GPS, notReallyFromBrowser?: boolean) => {
+  state.currentGPS = coords;
+  if (!notReallyFromBrowser) {
+    _latestBrowserGPS = { ...coords };
+  }
+});
+
+export const map = action('map', (map: Partial<State['map']>) => {
+  state.map = {
+    ...state.map,
+    ...map,
+  };
+  localStorage.setItem('af.manure.map', JSON.stringify(state.map));
+  // If map GPS mode is selected, then the map center has to be curretn GPS coords:
+  if (state.gpsMode === 'map') {
+    // Note "true" to tell currentGPS this is not really from the browser
+    currentGPS({ lat: state.map.center[0], lon: state.map.center[1] }, true);
+  }
+});
+
+export const gpsMode = action('gpsMode', (gpsMode: State['gpsMode']) => {
+  state.gpsMode = gpsMode;
+  if (gpsMode === 'me') { // switching back to 'me' needs to re-load my coords
+    currentGPS(_latestBrowserGPS, true);
+  } else { // map: initialize to map center
+    currentGPS({ lat: state.map.center[0], lon: state.map.center[1] }, true);
+  }
 });
 
 //---------------------
@@ -325,4 +361,35 @@ export const record = action('record', (r: Partial<LoadRecord>) => {
     ...r,
   };
   localStorage.setItem('af.manure.loadRecord', JSON.stringify(state.record));
+});
+
+//---------------------
+// Fields
+//---------------------
+
+export const autoselectField = action(() => {
+  const { lat, lon } = state.currentGPS;
+  if (!lat || !lon) {
+    warn('No current GPS coordinates available');
+    return;
+  }
+
+  // Create a Turf.js point from currentGPS
+  const gpsPoint = point([lon, lat]); // Turf expects [lng, lat]
+
+  // Find the field containing the point
+  const selectedField = state.fields.find((field) => {
+    try {
+      return booleanPointInPolygon(gpsPoint, field.boundary);
+    } catch (error) {
+      warn(`Error parsing boundary for field ${field.name}:`, error);
+      return false;
+    }
+  });
+
+  if (selectedField) {
+    state.record.field = selectedField.name;
+  } else {
+    snackbarMessage('No field found containing current GPS coordinates');
+  }
 });

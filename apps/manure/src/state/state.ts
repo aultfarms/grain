@@ -1,6 +1,7 @@
 import { observable } from 'mobx';
 import debug from 'debug';
 import type { FeatureCollection, GeoJSON } from 'geojson';
+import { LatLngTuple } from 'leaflet';
 const info = debug('af/manure#state:info');
 
 export type GPS = { lat: number; lon: number };
@@ -54,6 +55,11 @@ export type State = {
 
   // Where we are now:
   currentGPS: GPS,
+  gpsMode: 'map' | 'me',
+  map: {
+    center: LatLngTuple,
+    zoom: number,
+  },
 
   // Data loaded from sheets
   records: LoadRecord[];
@@ -69,7 +75,24 @@ export type State = {
     modalOpen: boolean;
   },
 
+  // Snackbar messages at bottom of screen:
+  snackbar: {
+    open: boolean,
+    message: string,
+  },
+
 };
+
+export function assertMap(o: any): asserts o is State['map'] {
+  if (!o || typeof o!== 'object') throw new Error('Expected Map to be a truthy object');
+  if (!o.center ||!Array.isArray(o.center) || o.center.length!== 2) throw new Error('Expected Map.center to be an array of length 2');
+  for (const c of o.center) {
+    if (typeof c!== 'number') throw new Error('Expected Map.center to be an array of numbers');
+  }
+  if (typeof o.zoom!== 'number') throw new Error('Expected Map.zoom to be a number');
+  if (o.zoom < 0) throw new Error('Expected Map.zoom to be a positive number');
+  if (o.zoom > 20) throw new Error('Expected Map.zoom to be < 20');
+}
 
 //-------------------------------------------------
 // Load anything from localstorage:
@@ -112,7 +135,7 @@ try {
   info('No valid previous record found in localstorage, using default');
 }
 
-// Default centered on barns
+// Cached GPS last time we were open:
 let currentGPS = { lat: 40.98147222, lon: -86.19505556 };
 try {
   const localcurrentGPS = JSON.parse(localStorage.getItem('af.manure.currentGPS') || '{}');
@@ -122,11 +145,26 @@ try {
   info('No valid previous GPS found in localstorage, using default');
 }
 
+// Cached map last time we were open:
+let map: State['map'] = {
+  center: [ 40.98147222, -86.19505556 ],
+  zoom: 12,
+};
+try {
+  const localmap = JSON.parse(localStorage.getItem('af.manure.map') || '{}');
+  assertMap(localmap);
+  map = localmap;
+} catch(e: any) {
+  info('No valid previous map center/zoom found in localstorage, using default');
+}
+
+
 export const state = observable<State>({
   currentYear: new Date().getFullYear(),
   sheetIds,
-  currentGPS: { lat: 0, lon: 0 },
-
+  currentGPS,
+  gpsMode: 'me',
+  map,
   records: [],
   fields: [],
   sources: [],
@@ -136,6 +174,11 @@ export const state = observable<State>({
 
   config: {
     modalOpen: false,
+  },
+
+  snackbar: {
+    open: false,
+    message: '',
   },
 
 });

@@ -21,6 +21,8 @@
     "@mui/material": "^6.4.6",
     "@mui/styled-engine": "^6.4.6",
     "@tmcw/togeojson": "^6.0.1",
+    "@turf/boolean-point-in-polygon": "^7.2.0",
+    "@turf/helpers": "^7.2.0",
     "@turf/turf": "^7.2.0",
     "@types/geojson": "^7946.0.16",
     "@types/react-leaflet": "^3.0.0",

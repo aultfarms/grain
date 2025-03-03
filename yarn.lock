@@ -17863,6 +17863,8 @@ __metadata:
     "@mui/material": "npm:^6.4.6"
     "@mui/styled-engine": "npm:^6.4.6"
     "@tmcw/togeojson": "npm:^6.0.1"
+    "@turf/boolean-point-in-polygon": "npm:^7.2.0"
+    "@turf/helpers": "npm:^7.2.0"
     "@turf/turf": "npm:^7.2.0"
     "@types/debug": "npm:^4"
     "@types/geojson": "npm:^7946.0.16"

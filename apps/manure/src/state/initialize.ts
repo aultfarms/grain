@@ -6,19 +6,17 @@ import debug from 'debug';
 
 const info = debug('af/manure#initialize:info');
 
-/**
- * Initializes the application by setting the document title, loading cached data,
- * authenticating with Google, and triggering spreadsheet verification.
- */
-let _gpsPollInterval: ReturnType<typeof setInterval> | null = null;
 export const initialize = async () => {
   info('Initializing app...');
 
   // **Set the document title with the app version**
   document.title = `AF/Manure - v${pkg.version}`;
 
-  // Grab GPS coordinates every second with actions.updateCurrentGPS
-  _gpsPollInterval = setInterval(actions.updateCurrentGPS, 1000);
+  // Get GPS coordinates every time they change:
+  navigator.geolocation.watchPosition(e => {
+    actions.currentGPS({ lat: e.coords.latitude, lon: e.coords.longitude });
+  })
+  info('Started watchPosition to updarte GPS coordinates as they change');
 
 /*
   // **Load cached data from local storage**
