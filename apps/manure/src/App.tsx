@@ -5,6 +5,7 @@ import { Map } from './Map';
 import { Form } from './Form';
 import { ConfigModal } from './ConfigModal';
 import { BottomLoadButton } from './BottomLoadButton';
+import { LoadingIndicator } from './LoadingIndicator';
 import { Snackbar } from '@mui/material';
 import { context } from './state';
 
@@ -17,12 +18,17 @@ export const App = observer(() => {
       <NavBar />
 
       <div className="content">
-        <div className="map-wrapper">
-          <Map />
-        </div>
-        <div className="form-wrapper">
-          <Form />
-        </div>
+        { state.loading
+          ? <LoadingIndicator/>
+          : <React.Fragment>
+              <div className="map-wrapper">
+                <Map />
+              </div>
+              <div className="form-wrapper">
+                <Form />
+              </div>
+            </React.Fragment>
+        }
       </div>
 
       <ConfigModal />

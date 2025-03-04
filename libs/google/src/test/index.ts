@@ -24,18 +24,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log('ERROR: did not find root element!');
   } else {
     root.innerHTML = "The test is running!"
-
+    /*
     info('Testing core:')
     await core(libsundertest);
-    /*
+
     info('Testing drive:')
     await drive(libsundertest);
-
+    */
     info('Testing sheets:')
     await sheets(libsundertest);
     info('All Google Tests Passed');
-    */
-    info('All enabled tests passed, but you have drive and sheets commented out')
+
+    info('All enabled tests passed, but you have drive and core commented out')
   }
 
 });

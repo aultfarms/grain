@@ -4,6 +4,10 @@ import type { FeatureCollection, GeoJSON } from 'geojson';
 import { LatLngTuple } from 'leaflet';
 const info = debug('af/manure#state:info');
 
+//---------------------------------------
+// Types and Assertions
+//---------------------------------------
+
 export type GPS = { lat: number; lon: number };
 export function assertGPS(o: any): asserts o is GPS {
   if (!o || typeof o!== 'object') throw new Error('Expected GPS to be a truthy object');
@@ -47,9 +51,9 @@ export type Driver = {
 };
 
 export type State = {
-  currentYear: number;
+  thisYear: number;
   sheetIds: {
-    currentYear: string,
+    thisYear: string,
     lastYear: string,
   },
 
@@ -75,6 +79,7 @@ export type State = {
     modalOpen: boolean;
   },
 
+  loading: boolean,
   // Snackbar messages at bottom of screen:
   snackbar: {
     open: boolean,
@@ -94,16 +99,18 @@ export function assertMap(o: any): asserts o is State['map'] {
   if (o.zoom > 20) throw new Error('Expected Map.zoom to be < 20');
 }
 
+
 //-------------------------------------------------
 // Load anything from localstorage:
 //-------------------------------------------------
 
+
 export function assertSheetIds(o: any): asserts o is State['sheetIds'] {
   if (!o || typeof o !== 'object') throw new Error('Expected SheetsIds to be a truthy object');
-  if (!o.currentYear || typeof o.currentYear!=='string') throw new Error('Expected SheetIds.currentYear to be a string');
-  if (!o.lastYear || typeof o.lastYear!=='string') throw new Error('Expected SheetIds.lastYear to be a string');
+  if (!o.thisYear|| typeof o.thisYear!=='string') throw new Error('Expected SheetIds.thisYear to be a string');
+  if (typeof o.lastYear!=='string') throw new Error('Expected SheetIds.lastYear to be a string');
 }
-let sheetIds = { currentYear: '', lastYear: '' };
+let sheetIds = { thisYear: '', lastYear: '' };
 try {
   const localsheetIds = JSON.parse(localStorage.getItem('af.manure.sheetIds') || '{}');
   assertSheetIds(localsheetIds);
@@ -160,7 +167,7 @@ try {
 
 
 export const state = observable<State>({
-  currentYear: new Date().getFullYear(),
+  thisYear: new Date().getFullYear(),
   sheetIds,
   currentGPS,
   gpsMode: 'me',
@@ -176,6 +183,7 @@ export const state = observable<State>({
     modalOpen: false,
   },
 
+  loading: true,
   snackbar: {
     open: false,
     message: '',

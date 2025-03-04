@@ -18,27 +18,9 @@ export const initialize = async () => {
   })
   info('Started watchPosition to updarte GPS coordinates as they change');
 
-/*
-  // **Load cached data from local storage**
-  const cachedCurrentId = localStorage.getItem('currentSheetId');
-  const cachedLastYearId = localStorage.getItem('lastYearSheetId');
-  const selectedField = localStorage.getItem('selectedField');
-  const selectedSource = localStorage.getItem('selectedSource');
-  const selectedDriver = localStorage.getItem('selectedDriver');
-
-  // **Set initial state with cached values**
-  runInAction(() => {
-    state.currentSheetId = cachedCurrentId;
-    state.lastYearSheetId = cachedLastYearId;
-    state.selectedField = selectedField;
-    state.selectedSource = selectedSource;
-    state.selectedDriver = selectedDriver;
-  });
-
   // **Authenticate with Google**
   await auth.authorize();
 
   // **Trigger asynchronous spreadsheet verification and updates**
-  actions.verifyAndUpdateSpreadsheets();
-*/
+  actions.loadAllSheets();
 };

@@ -17,81 +17,6 @@ const { ensureSpreadsheet,
 const { idFromPath } = drive;
 
 /*
-
-// Define the structure of the sheet data
-type SheetData = {
-  records: { date: string; field: string; source: string; loads: number }[];
-  fields: { name: string; boundary: string }[];
-  sources: { name: string }[];
-  drivers: { name: string }[];
-};
-
-export const verifyAndUpdateSpreadsheets = action('verifyAndUpdateSpreadsheets', async () => {
-  const currentYear = new Date().getFullYear();
-  const previousYear = currentYear - 1;
-
-  const currentPath = `Ault Farms Operations/ManureRecords/${currentYear}_ManureRecords`;
-  const previousPath = `Ault Farms Operations/ManureRecords/${previousYear}_ManureRecords`;
-
-  // Ensure current year's spreadsheet
-  let currentSpreadsheetId = state.currentSheetId;
-  if (!currentSpreadsheetId) {
-    currentSpreadsheetId = await ensureCurrentYearSpreadsheet(currentYear, previousYear);
-    runInAction(() => {
-      state.currentSheetId = currentSpreadsheetId;
-      localStorage.setItem('currentSheetId', currentSpreadsheetId);
-    });
-  }
-
-  // Ensure previous year's spreadsheet
-  let lastYearSpreadsheetId = state.lastYearSheetId;
-  if (!lastYearSpreadsheetId) {
-    lastYearSpreadsheetId = await idFromPath({ path: previousPath });
-    if (lastYearSpreadsheetId) {
-      runInAction(() => {
-        state.lastYearSheetId = lastYearSpreadsheetId;
-        localStorage.setItem('lastYearSheetId', lastYearSpreadsheetId);
-      });
-    }
-  }
-
-  // Load data into state for current year
-  if (currentSpreadsheetId) {
-    const currentData = await spreadsheetToJson({ id: currentSpreadsheetId });
-    runInAction(() => {
-      state.currentSheet = {
-        records: currentData.records?.data || [],
-        fields: currentData.fields?.data || [],
-        sources: currentData.sources?.data || [],
-        drivers: currentData.drivers?.data || [],
-      };
-    });
-  }
-
-  // Load data into state for previous year
-  if (lastYearSpreadsheetId) {
-    const lastYearData = await spreadsheetToJson({ id: lastYearSpreadsheetId });
-    runInAction(() => {
-      state.lastYearSheet = {
-        records: lastYearData.records?.data || [],
-        fields: lastYearData.fields?.data || [],
-        sources: lastYearData.sources?.data || [],
-        drivers: lastYearData.drivers?.data || [],
-      };
-    });
-  }
-});
-
-
-export const setSelection = action('setSelection', (key: 'selectedField' | 'selectedSource' | 'selectedDriver', value: string | null) => {
-  state[key] = value;
-  if (value) localStorage.setItem(key, value);
-});
-
-export const setDate = action('setDate', (date: string) => {
-  state.selectedDate = date;
-});
-
 export const uploadKMZ = action('uploadKMZ', async (file: File) => {
   try {
     const currentSheet = await sheetToJson({
@@ -186,60 +111,6 @@ export async function parseKMZ(file: File): Promise<{ name: string; boundary: st
     }));
 }
 
-async function ensureCurrentYearSpreadsheet(currentYear: number, previousYear: number): Promise<string> {
-  const currentPath = `Ault Farms Operations/ManureRecords/${currentYear}_ManureRecords`;
-  const previousPath = `Ault Farms Operations/ManureRecords/${previousYear}_ManureRecords`;
-
-  let currentSpreadsheetId = await idFromPath({ path: currentPath });
-  if (!currentSpreadsheetId) {
-    currentSpreadsheetId = (await ensureSpreadsheet({ path: currentPath })).id;
-
-    const previousSpreadsheetId = await idFromPath({ path: previousPath });
-    if (previousSpreadsheetId) {
-      const previousData = await spreadsheetToJson({ id: previousSpreadsheetId });
-      const sheetsToCopy = ['fields', 'sources', 'drivers'];
-      for (const sheetName of sheetsToCopy) {
-        const sheetData = previousData[sheetName];
-        if (sheetData) {
-          const header = sheetData.header;
-          const rows = sheetData.data.map((row, index) => ({ lineno: index + 2, ...row }));
-          await batchUpsertRows({
-            id: currentSpreadsheetId,
-            worksheetName: sheetName,
-            rows,
-            header,
-            insertOrUpdate: 'INSERT',
-          });
-        }
-      }
-      const recordsHeader = ['date', 'field', 'source', 'loads'];
-      await batchUpsertRows({
-        id: currentSpreadsheetId,
-        worksheetName: 'records',
-        rows: [],
-        header: recordsHeader,
-        insertOrUpdate: 'INSERT',
-      });
-    } else {
-      const defaultSheets = {
-        records: ['date', 'field', 'source', 'loads'],
-        fields: ['name', 'boundary'],
-        sources: ['name', 'type', 'max ac/load'],
-        drivers: ['name'],
-      };
-      for (const [sheetName, header] of Object.entries(defaultSheets)) {
-        await batchUpsertRows({
-          id: currentSpreadsheetId,
-          worksheetName: sheetName,
-          rows: [],
-          header,
-          insertOrUpdate: 'INSERT',
-        });
-      }
-    }
-  }
-  return currentSpreadsheetId;
-}
 
 export const recordLoad = action('recordLoad', async () => {
   if (!state.selectedField || !state.selectedSource || !state.selectedDriver) {
@@ -292,7 +163,6 @@ export const recordLoad = action('recordLoad', async () => {
   });
   info('Load recorded:', newRecord);
 });
-
 */
 
 //-----------------------------------------------------
@@ -393,3 +263,103 @@ export const autoselectField = action(() => {
     snackbarMessage('No field found containing current GPS coordinates');
   }
 });
+
+
+//----------------------------------
+// Spreadsheets
+//----------------------------------
+
+export const sheetIds = action('sheetIds', (sheetIds: Partial<State['sheetIds']>) => {
+  state.sheetIds = {
+    ...state.sheetIds,
+    ...sheetIds,
+  };
+  localStorage.setItem('af.manure.sheetIds', JSON.stringify(state.sheetIds));
+  // Note: this does not trigger a full reload of everything, you have to call that yourself.
+});
+
+export const loadAllSheets = action('loadAllSheets', async () => {
+  const thisYear = new Date().getFullYear();
+  const lastYear = thisYear - 1;
+
+  const thisYearPath = 'Ault Farms Operations/ManureRecords/'+thisYear+'_ManureRecords';
+  const lastYearPath = 'Ault Farms Operations/ManureRecords/'+lastYear+'_ManureRecords';
+
+  if (!state.sheetIds.thisYear) {
+    // This puts id's into state.sheetIds
+    await ensureManureSheets(thisYearPath, lastYearPath);
+  } else {
+    // Otherwise, continue on with loading that sheet, but fire off this async
+    // check to make sure that's still the sheet:
+    idFromPath({ path: thisYearPath }).then(({ id }) => {
+      if ( id !== state.sheetIds.thisYear) {
+        snackbarMessage('WARNING: current sheet in google has changed its id, reloading new sheet')
+        sheetIds({ thisYear: '', lastYear: '' });
+        loadAllSheets(); // recursively call ourselves now that the sheet id's are cleared out
+      }
+    });
+  }
+
+  const thisYearSheet = await spreadsheetToJson({ id: state.sheetIds.thisYear });
+  let lastYearSheet: typeof thisYearSheet | null = null;
+  if (state.sheetIds.lastYear) lastYearSheet = await spreadsheetToJson({ id: state.sheetIds.lastYear});
+  // Grab all the records and load into the state:
+  await loadFields(thisYearSheet, lastYearSheet);
+  await loadSources(thisYearSheet, lastYearSheet);
+  await loadDrivers(thisYearSheet, lastYearSheet);
+  await loadRecords(thisYearSheet, lastYearSheet);
+});
+
+async function ensureManureSheets(thisYearPath: string, lastYearPath: number): Promise<string> {
+
+
+  let currentSpreadsheetId = await idFromPath({ path: currentPath });
+  if (!currentSpreadsheetId) {
+    currentSpreadsheetId = (await ensureSpreadsheet({ path: currentPath })).id;
+
+    const previousSpreadsheetId = await idFromPath({ path: previousPath });
+    if (previousSpreadsheetId) {
+      const previousData = await spreadsheetToJson({ id: previousSpreadsheetId });
+      const sheetsToCopy = ['fields', 'sources', 'drivers'];
+      for (const sheetName of sheetsToCopy) {
+        const sheetData = previousData[sheetName];
+        if (sheetData) {
+          const header = sheetData.header;
+          const rows = sheetData.data.map((row, index) => ({ lineno: index + 2, ...row }));
+          await batchUpsertRows({
+            id: currentSpreadsheetId,
+            worksheetName: sheetName,
+            rows,
+            header,
+            insertOrUpdate: 'INSERT',
+          });
+        }
+      }
+      const recordsHeader = ['date', 'field', 'source', 'loads'];
+      await batchUpsertRows({
+        id: currentSpreadsheetId,
+        worksheetName: 'records',
+        rows: [],
+        header: recordsHeader,
+        insertOrUpdate: 'INSERT',
+      });
+    } else {
+      const defaultSheets = {
+        records: ['date', 'field', 'source', 'loads'],
+        fields: ['name', 'boundary'],
+        sources: ['name', 'type', 'max ac/load'],
+        drivers: ['name'],
+      };
+      for (const [sheetName, header] of Object.entries(defaultSheets)) {
+        await batchUpsertRows({
+          id: currentSpreadsheetId,
+          worksheetName: sheetName,
+          rows: [],
+          header,
+          insertOrUpdate: 'INSERT',
+        });
+      }
+    }
+  }
+  return currentSpreadsheetId;
+}

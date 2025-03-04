@@ -238,6 +238,7 @@ export default async function sheets(g: Google) {
   let ensureSpreadsheetPath = `${path}/test_ensure1`;
   const r8 = await g.sheets.ensureSpreadsheet({ path: ensureSpreadsheetPath });
   if (!r8?.id) throw `ERROR: ensureSpreadsheet failed to return an id`;
+  if (!r8.createdSpreadsheet) throw `ERROR: ensureSpreadsheet created spreadsheet, but createdSpreadsheet was falsey`;
   info('the first ensureSpreadsheet returned',r8);
   const r9 = await g.sheets.getSpreadsheet({ id: r8.id });
   info('the first getSpreadsheet returned',r9);
@@ -245,11 +246,16 @@ export default async function sheets(g: Google) {
 
   info('sheets: ensureSpreadsheet without worksheetName and sheet already exists');
   const r10 = await g.sheets.ensureSpreadsheet( { path: ensureSpreadsheetPath });
-  if (r10?.id !== r8?.id) throw `ERROR: after second ensureSpreadsheet on the same path, did not get same id back.`;
+  if (!r10) throw `ERROR: ensureSpreadsheet returned null`;
+  if (r10.createdSpreadsheet) throw `ERROR: ensureSpreadsheet did not create spreadsheet because it already existed, but createdSpreadsheet was truthy`;
+  if (r10.id !== r8?.id) throw `ERROR: after second ensureSpreadsheet on the same path, did not get same id back.`;
 
   info('sheets: ensureSpreadsheet with worksheetName and folder to create');
   ensureSpreadsheetPath = `${path}/newfolder/test_ensure2`;
   const r11 = await g.sheets.ensureSpreadsheet({ path: ensureSpreadsheetPath, worksheetName });
+  if (!r11) throw `ERROR: ensureSpreadsheet with worksheetName returned null`;
+  if (!r11.createdSpreadsheet) throw `ERROR: ensureSpreadsheet with worksheetName did not return truthy createdSpreadsheet`;
+  if (!r11.createdWorksheet) throw `ERROR: ensureSpreadsheet with worksheetName did not return truthy createdWorksheet.  worksheetName = ${worksheetName}, r11 = ${JSON.stringify(r11)}`;
   if (!r11?.id) throw `ERROR: ensureSpreadsheet with worksheetName did not return an id`;
   if (!r11?.worksheetid) throw `ERROR: ensureSpreadsheet with worksheetName did not return a worksheetid`;
   const r12 = await g.sheets.getSpreadsheet({ id: r11.id });
@@ -262,6 +268,11 @@ export default async function sheets(g: Google) {
   if (r14?.id !== r11.id) throw `ERROR: second call to ensureSpreadsheet with worksheetName did NOT return same id as the first.`;
   if (r14?.worksheetid !== r11.worksheetid) throw `ERROR: second call to ensureSpreadsheet with worksheetName did NOT return same worksheetid as the first.`;
 
+  info(`sheets: createWorksheetInSpreadsheet with a header`);
+  await g.sheets.createWorksheetInSpreadsheet({ id: r14.id, worksheetName: 'newworksheet', header });
+  const r15 = await g.sheets.sheetToJson({ id: r14.id, worksheetName: 'newworksheet' });
+  if (!r15) throw `ERROR: sheetToJson returned nothing`;
+  if (r15.header.join(',')!== header.join(',')) throw `ERROR: header from createWorksheetInSpreadsheet did not create a sheet with the proper header`;
 
   info(`sheets: all tests passed`);
 }

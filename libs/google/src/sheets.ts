@@ -357,6 +357,9 @@ export async function getSpreadsheet(
 // you can also ensure a worksheet exists within that spreadsheet
 export async function ensureSpreadsheet({ path, worksheetName }: { path: string, worksheetName?: string }) {
   const parts = path.split('/');
+  let createdSpreadsheet = false; // represents if we needed to create the spreadsheet or if it already existed
+  let createdWorksheet = false;
+
   if (!path) {
     warn('ensureSpreadsheet: you passed an empty path.');
     return null;
@@ -390,6 +393,8 @@ export async function ensureSpreadsheet({ path, worksheetName }: { path: string,
   // If the file isn't there, make it.
   if (!id) {
     trace('ensureSpreadsheet: directory exists, but sheet does not.  Creating sheet at id',dir.id,' with filename',filename);
+    createdSpreadsheet = true;
+    if (worksheetName) createdWorksheet = true;
     const spreadsheet = await createSpreadsheet({ parentid: dir.id, name: filename, worksheetName });
     if (!spreadsheet) {
       warn('WARNING: ensureSpreadsheet unable to createSpreadsheet in parent folder',dir.id,'with filename',filename);
@@ -401,26 +406,14 @@ export async function ensureSpreadsheet({ path, worksheetName }: { path: string,
 
   // Now we know we have an id for the spreadsheet and it is a Google Sheet
   // If they don't want to ensure a worksheet, we're done
-  if (!worksheetName) return { id };
+  if (!worksheetName) return { id, createdSpreadsheet };
 
   // Otherwise, ensure the worksheet is in there too:
   let worksheetid = await worksheetIdFromName({id, name: worksheetName })
+  trace('ensureSpreadsheet: after getting worksheetid for worksheetName',worksheetName,', it is', worksheetid);
   if (!worksheetid) {
-    await ((await client()).sheets.spreadsheets.batchUpdate(
-      { spreadsheetId: id },
-      {
-        requests: [
-          {
-            addSheet: {
-              properties: {
-                title: worksheetName,
-                index: 0
-              }
-            }
-          }
-        ]
-      }
-    ));
+    createdWorksheet = true;
+    createWorksheetInSpreadsheet({ id, worksheetName });
     worksheetid = await worksheetIdFromName({ id, name: worksheetName });
     if (!worksheetid) {
       warn('WARNING: ensureSpreadsheet tried to create worksheet',worksheetName,', but it does not exist in the spreadsheet after creating it.');
@@ -429,7 +422,7 @@ export async function ensureSpreadsheet({ path, worksheetName }: { path: string,
   }
   await cachedWorksheetNumAvailableRows({id, worksheetName, forceUpdate: true});
   // Now we know we have both an id and a worksheetid
-  return { id, worksheetid };
+  return { id, worksheetid, createdSpreadsheet, createdWorksheet };
 }
 
 export type SheetJson = {
@@ -519,7 +512,16 @@ export async function createSpreadsheet({
   const id = fileresult.id;
   if (!worksheetName) return {id};
   // If we have a worksheetName, add a worksheet with that name
-  await ((await client()).sheets.spreadsheets.batchUpdate(
+  await createWorksheetInSpreadsheet({ id, worksheetName });
+  await cachedWorksheetNumAvailableRows({id, worksheetName, forceUpdate: true});
+  return {id};
+}
+
+export async function createWorksheetInSpreadsheet(
+  { id, worksheetName, header }:
+  { id: string, worksheetName: string, header?: string[] }
+): Promise<void> {
+  await (await client()).sheets.spreadsheets.batchUpdate(
     { spreadsheetId: id },
     {
       requests: [
@@ -533,11 +535,14 @@ export async function createSpreadsheet({
         }
       ]
     }
-  ));
+  );
+  trace('createWorksheetInSpreadsheet: worksheet created');
+  if (header) {
+    trace('Adding header row');
+    await putRow({ id, worksheetName, row:'1', cols:header });
+  }
   await cachedWorksheetNumAvailableRows({id, worksheetName, forceUpdate: true});
-  return {id};
 }
-
 
 // NOTE: this function is repeated in accounts/src/node because I don't have a great
 // place to put shared XLSX utilities at the moment.
