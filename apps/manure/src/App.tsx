@@ -16,7 +16,11 @@ export const App = observer(() => {
   return (
     <div className="main">
       <NavBar />
-
+      { state.loadingError &&
+        <div className="loading-error">
+          {state.loadingError}
+        </div>
+      }
       <div className="content">
         { state.loading
           ? <LoadingIndicator/>

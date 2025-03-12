@@ -11,8 +11,8 @@ export const Form = observer(() => {
       <TextField
         label="Date"
         type="date"
-        value={state.record.date}
-        onChange={e => actions.record({ date: e.target.value })}
+        value={state.load.date}
+        onChange={e => actions.load({ date: e.target.value })}
         fullWidth
         sx={{ mb: 2 }}
       />
@@ -22,9 +22,9 @@ export const Form = observer(() => {
         <Select
           labelId="field-label"
           label="Field"
-          value={state.record.field}
+          value={state.load.field}
           sx={{ flexGrow: 1 }}
-          onChange={e => actions.record({ field: e.target.value })}
+          onChange={e => actions.load({ field: e.target.value })}
         >
           {state.fields.map(f => (
             <MenuItem key={f.name} value={f.name}>{f.name}</MenuItem>
@@ -44,8 +44,8 @@ export const Form = observer(() => {
         <Select
           labelId="source-label"
           label="Source"
-          value={state.record.source}
-          onChange={e => actions.record({ source: e.target.value })}
+          value={state.load.source}
+          onChange={e => actions.load({ source: e.target.value })}
         >
           {state.sources.map(f => (
             <MenuItem key={f.name} value={f.name}>{f.name}</MenuItem>
@@ -58,8 +58,8 @@ export const Form = observer(() => {
         <Select
           labelId="driver-label"
           label="Driver"
-          value={state.record.driver}
-          onChange={e => actions.record({ driver: e.target.value })}
+          value={state.load.driver}
+          onChange={e => actions.load({ driver: e.target.value })}
         >
           {state.drivers.map(f => (
             <MenuItem key={f.name} value={f.name}>{f.name}</MenuItem>

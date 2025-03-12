@@ -31,7 +31,7 @@ const MapEvents = () => {
       const map = e.target;
       const center = map.getCenter();
       const zoom = map.getZoom();
-      actions.map({
+      actions.mapView({
         center: [center.lat, center.lng],
         zoom,
       });
@@ -49,8 +49,8 @@ const MapController = observer(() => {
   useEffect(() => {
     const currentCenter = map.getCenter();
     const currentZoom = map.getZoom();
-    const stateCenter = state.map.center;
-    const stateZoom = state.map.zoom;
+    const stateCenter = state.mapView.center;
+    const stateZoom = state.mapView.zoom;
 
     // Only update if the map's view differs from the state
     if (
@@ -60,26 +60,27 @@ const MapController = observer(() => {
     ) {
       map.setView(stateCenter, stateZoom);
     }
-  }, [state.map.center, state.map.zoom, map]);
+  }, [state.mapView.center, state.mapView.zoom, map]);
 
   return null;
 });
 
 export const Map = observer(() => {
   const { state } = React.useContext(context);
-  const todayLoads = state.records
-    .filter(r => r.date === state.record.date && r.field === state.record.field && r.source === state.record.source)
+  const l = state.load;
+  const todayLoads = state.loads
+    .filter(r => r.date === l.date && r.field === l.field && r.source === l.source)
     .reduce((sum, r) => sum + r.loads, 0);
-  const seasonLoads = state.records
-    .filter(r => r.field === state.record.field && r.source === state.record.source)
+  const seasonLoads = state.loads
+    .filter(r => r.field === l.field && r.source === l.source)
     .reduce((sum, r) => sum + r.loads, 0);
 
   return (
     <div style={{ position: 'relative' }}>
       <MapContainer
         className="mapcontainer"
-        center={state.map.center}
-        zoom={state.map.zoom}
+        center={state.mapView.center}
+        zoom={state.mapView.zoom}
         zoomControl={false} // get rid of the +/- zoom buttons
       >
         <TileLayer url="https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}{r}.jpg"/>
@@ -95,7 +96,7 @@ export const Map = observer(() => {
         <MapController/>
       </MapContainer>
       <Typography sx={{ position: 'absolute', top: '10px', left: '10px', background: 'rgba(255, 255, 255, 0.7)', padding: '5px', zIndex: 1000 }}>
-        Field: {state.record.field || 'None'} | Source: {state.record.source || 'None'} | Today: {todayLoads} | Season: {seasonLoads}
+        Field: {state.load.field || 'None'} | Source: {state.load.source || 'None'} | Today: {todayLoads} | Season: {seasonLoads}
       </Typography>
       {state.gpsMode === 'map' && (
         <Typography

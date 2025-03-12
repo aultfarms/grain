@@ -57,6 +57,7 @@ export async function ensurePath({
     return ensurePath({
       path: rest.join('/'),
       id: result?.id,
+      donotcreate,
     });
   }
   trace('google.ensurePath: found ',name,', going down rest of path ',rest.join('/'));
@@ -71,6 +72,7 @@ export async function ensurePath({
   return ensurePath({
     path: rest.join('/'),
     id: nextid,
+    donotcreate,
   });
 };
 

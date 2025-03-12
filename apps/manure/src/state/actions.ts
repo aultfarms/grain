@@ -1,19 +1,38 @@
-import { action, runInAction } from 'mobx';
-import { GPS, LoadRecord, state, State } from './state';
+import { action } from 'mobx';
+import {
+  GPS,
+  state,
+  State,
+  defaultHeaders,
+  Field,
+  assertFields,
+  Source,
+  assertSources,
+  Driver,
+  assertDrivers,
+  LoadsRecord,
+  assertLoadsRecords,
+  FieldGeoJSON,
+  LoadsRecordGeoJSON,
+  LoadsRecordGeoJSONProps} from './state';
 import { sheets, drive } from '@aultfarms/google';
+import { FeatureCollection, Polygon, MultiPolygon, Feature, Point } from 'geojson';
 import JSZip from 'jszip';
 import * as toGeoJSON from '@tmcw/togeojson';
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
 import { point, polygon } from '@turf/helpers';
 import debug from 'debug';
-import { getCurrentGPSFromBrowser } from '../util';
 
 const info = debug('af/manure:info');
 const warn = debug('af/manure:warn');
+const error = debug('af/manure:error');
+
 const { ensureSpreadsheet,
   spreadsheetToJson,
   batchUpsertRows,
-  sheetToJson, } = sheets;
+  createWorksheetInSpreadsheet,
+  putRow,
+} = sheets;
 const { idFromPath } = drive;
 
 /*
@@ -186,6 +205,16 @@ export const closeSnackbar = action('closeSnackbar', () => {
   state.snackbar.open = false;
 });
 
+export const loading = action('loading', (loading: boolean) => {
+  state.loading = loading;
+});
+
+export const loadingError = action('loadingError', (error: string) => {
+  state.loadingError = error;
+  snackbarMessage(error);
+});
+
+
 //---------------------
 // GPS and Map
 //---------------------
@@ -198,16 +227,16 @@ export const currentGPS = action('currentGPS', async (coords: GPS, notReallyFrom
   }
 });
 
-export const map = action('map', (map: Partial<State['map']>) => {
-  state.map = {
-    ...state.map,
+export const mapView = action('mapView', (map: Partial<State['mapView']>) => {
+  state.mapView = {
+    ...state.mapView,
     ...map,
   };
-  localStorage.setItem('af.manure.map', JSON.stringify(state.map));
+  localStorage.setItem('af.manure.map', JSON.stringify(state.mapView));
   // If map GPS mode is selected, then the map center has to be curretn GPS coords:
   if (state.gpsMode === 'map') {
     // Note "true" to tell currentGPS this is not really from the browser
-    currentGPS({ lat: state.map.center[0], lon: state.map.center[1] }, true);
+    currentGPS({ lat: state.mapView.center[0], lon: state.mapView.center[1] }, true);
   }
 });
 
@@ -216,7 +245,7 @@ export const gpsMode = action('gpsMode', (gpsMode: State['gpsMode']) => {
   if (gpsMode === 'me') { // switching back to 'me' needs to re-load my coords
     currentGPS(_latestBrowserGPS, true);
   } else { // map: initialize to map center
-    currentGPS({ lat: state.map.center[0], lon: state.map.center[1] }, true);
+    currentGPS({ lat: state.mapView.center[0], lon: state.mapView.center[1] }, true);
   }
 });
 
@@ -225,12 +254,12 @@ export const gpsMode = action('gpsMode', (gpsMode: State['gpsMode']) => {
 //---------------------
 
 // Form changes:
-export const record = action('record', (r: Partial<LoadRecord>) => {
-  state.record = {
-    ...state.record,
+export const load = action('load', (r: Partial<LoadsRecord>) => {
+  state.load = {
+    ...state.load,
     ...r,
   };
-  localStorage.setItem('af.manure.loadRecord', JSON.stringify(state.record));
+  localStorage.setItem('af.manure.loadRecord', JSON.stringify(state.load));
 });
 
 //---------------------
@@ -251,14 +280,14 @@ export const autoselectField = action(() => {
   const selectedField = state.fields.find((field) => {
     try {
       return booleanPointInPolygon(gpsPoint, field.boundary);
-    } catch (error) {
+    } catch (error: any) {
       warn(`Error parsing boundary for field ${field.name}:`, error);
       return false;
     }
   });
 
   if (selectedField) {
-    state.record.field = selectedField.name;
+    state.load.field = selectedField.name;
   } else {
     snackbarMessage('No field found containing current GPS coordinates');
   }
@@ -279,87 +308,258 @@ export const sheetIds = action('sheetIds', (sheetIds: Partial<State['sheetIds']>
 });
 
 export const loadAllSheets = action('loadAllSheets', async () => {
+  loading(true);
+  loadingError('');
   const thisYear = new Date().getFullYear();
   const lastYear = thisYear - 1;
 
   const thisYearPath = 'Ault Farms Operations/ManureRecords/'+thisYear+'_ManureRecords';
   const lastYearPath = 'Ault Farms Operations/ManureRecords/'+lastYear+'_ManureRecords';
 
-  if (!state.sheetIds.thisYear) {
-    // This puts id's into state.sheetIds
-    await ensureManureSheets(thisYearPath, lastYearPath);
-  } else {
-    // Otherwise, continue on with loading that sheet, but fire off this async
-    // check to make sure that's still the sheet:
-    idFromPath({ path: thisYearPath }).then(({ id }) => {
-      if ( id !== state.sheetIds.thisYear) {
-        snackbarMessage('WARNING: current sheet in google has changed its id, reloading new sheet')
-        sheetIds({ thisYear: '', lastYear: '' });
-        loadAllSheets(); // recursively call ourselves now that the sheet id's are cleared out
-      }
-    });
+  try {
+    if (!state.sheetIds.thisYear) {
+      info('There is no sheetId for this year, ensuring they exist to load them');
+      // This puts id's into state.sheetIds
+      await ensureManureSheets(thisYearPath, lastYearPath);
+    } else {
+      info('Already have a sheetId for this year, will double-check it after everything loads');
+    }
+
+    info('Loading spreadsheetToJson for id ', state.sheetIds.thisYear);
+    const thisYearSheet = await spreadsheetToJson({ id: state.sheetIds.thisYear });
+    info('Load this year:', thisYearSheet);
+    let lastYearSheet: typeof thisYearSheet | null = null;
+    info('Loading last year for id if truthy: ', state.sheetIds.lastYear);
+    if (state.sheetIds.lastYear) lastYearSheet = await spreadsheetToJson({ id: state.sheetIds.lastYear});
+    // Grab all the records and load into the state:
+    info('This year and last year loaded.  Last year = ', lastYearSheet);
+    await loadFields(thisYearSheet);
+    await loadSources(thisYearSheet);
+    await loadDrivers(thisYearSheet);
+    await loadLoads(thisYearSheet, lastYearSheet);
+    loading(false);
+  } catch(e: any) {
+    loadingError('Reload page.  There was an error loading spreadsheets: '+ e.message);
+    info('Invalidating sheet cache in case the error needs new sheets');
+    sheetIds({ thisYear: '', lastYear: '' });
+    return;
   }
 
-  const thisYearSheet = await spreadsheetToJson({ id: state.sheetIds.thisYear });
-  let lastYearSheet: typeof thisYearSheet | null = null;
-  if (state.sheetIds.lastYear) lastYearSheet = await spreadsheetToJson({ id: state.sheetIds.lastYear});
-  // Grab all the records and load into the state:
-  await loadFields(thisYearSheet, lastYearSheet);
-  await loadSources(thisYearSheet, lastYearSheet);
-  await loadDrivers(thisYearSheet, lastYearSheet);
-  await loadRecords(thisYearSheet, lastYearSheet);
+  // Fire off check to make sure that's still the sheetId.
+  if (state.sheetIds.thisYear) {
+    try {
+      const { id } = await idFromPath({ path: thisYearPath });
+      if ( id !== state.sheetIds.thisYear) {
+        snackbarMessage('WARNING: current sheet in google has changed its id, refresh your browser')
+        sheetIds({ thisYear: '', lastYear: '' });
+      }
+    } catch(e: any) {
+      snackbarMessage('WARNING: current sheet in google has changed its id, refresh your browser')
+      sheetIds({ thisYear: '', lastYear: '' });
+    }
+  }
+
+  if (state.sheetIds.lastYear) {
+    try {
+      const { id } = await idFromPath({ path: lastYearPath });
+      if ( id !== state.sheetIds.lastYear) {
+        snackbarMessage('WARNING: current sheet in google has changed its id, reloading new sheet')
+        sheetIds({ lastYear: '' });
+        loadAllSheets(); // recursively call ourselves now that the sheet id's are cleared out
+      }
+    } catch(e: any) {
+      snackbarMessage('WARNING: last year spreadsheet in google has changed its id, refresh your browser')
+      info('No last year spreadsheet found in cached id check.');
+      sheetIds({ lastYear: '' });
+    };
+  }
+
 });
 
-async function ensureManureSheets(thisYearPath: string, lastYearPath: number): Promise<string> {
+async function ensureManureSheets(thisYearPath: string, lastYearPath: string): Promise<void> {
+  snackbarMessage('Loading spreadsheets from Google Drive');
+  try {
 
+    // Make sure this year exists:
+    info('Ensuring spreadsheet for this year.');
+    const thisYearInfo = await ensureSpreadsheet({ path: thisYearPath });
+    info('This year spreadsheet ensured, info = ', thisYearInfo);
 
-  let currentSpreadsheetId = await idFromPath({ path: currentPath });
-  if (!currentSpreadsheetId) {
-    currentSpreadsheetId = (await ensureSpreadsheet({ path: currentPath })).id;
+    // See if we have anything from last year:
+    let lastYearInfo: { id: string } | null = null;
+    try {
+      lastYearInfo = await idFromPath({ path: lastYearPath });
+      info('Found last year spreadsheet in google drive, id = ', lastYearInfo.id);
+    } catch(e: any) {
+      info('No last year spreadsheet found.');
+    }
+    info('Last year spreadsheet idFromPath returned: ', lastYearInfo);
 
-    const previousSpreadsheetId = await idFromPath({ path: previousPath });
-    if (previousSpreadsheetId) {
-      const previousData = await spreadsheetToJson({ id: previousSpreadsheetId });
-      const sheetsToCopy = ['fields', 'sources', 'drivers'];
-      for (const sheetName of sheetsToCopy) {
-        const sheetData = previousData[sheetName];
-        if (sheetData) {
-          const header = sheetData.header;
-          const rows = sheetData.data.map((row, index) => ({ lineno: index + 2, ...row }));
-          await batchUpsertRows({
-            id: currentSpreadsheetId,
-            worksheetName: sheetName,
-            rows,
-            header,
-            insertOrUpdate: 'INSERT',
-          });
+    if (!thisYearInfo) {
+      throw new Error('Failed to check spreadsheets in Google Drive');
+    }
+    const { id, createdSpreadsheet } = thisYearInfo;
+
+    const newSheetIds = {
+      thisYear: id,
+      lastYear: lastYearInfo?.id || '',
+    }
+    sheetIds(newSheetIds);
+
+    // If the sheet was created, populate it either from original lastYear,
+    // or just initialize headers on empty sheets
+    if (createdSpreadsheet) {
+      // Grab last year as template if it exists:
+      const lastYearData = (lastYearInfo && lastYearInfo.id) ? await spreadsheetToJson({ id: lastYearInfo.id }) : null;
+      info('lastYearData = ', lastYearData);
+
+      // Create and populate metadata sheets:
+      for (const worksheetName of (['fields','sources', 'drivers', 'loads'] as (keyof typeof defaultHeaders)[])) {
+        info('Creating worksheet ', worksheetName);
+        const json = lastYearData?.[worksheetName];
+        const header = json?.header || defaultHeaders[worksheetName];
+        const rows = json?.data.map((f, index) => ({ ...f, lineno: index+2 }));
+        await createWorksheetInSpreadsheet({ id, worksheetName });
+        // loads sheet is never copied from year to year
+        if (worksheetName !== 'loads' && json && json.header.length > 0 && rows) {
+          info('Have previous year data for template, batchUpserting it for worksheet ', worksheetName);
+          await batchUpsertRows({ id, worksheetName, rows, header, insertOrUpdate: 'UPDATE' });
+        } else {
+          info('Have no previous year data, putting headers for worksheet ', worksheetName);
+          await putRow({ id, worksheetName, row: '1', cols: header });
         }
       }
-      const recordsHeader = ['date', 'field', 'source', 'loads'];
-      await batchUpsertRows({
-        id: currentSpreadsheetId,
-        worksheetName: 'records',
-        rows: [],
-        header: recordsHeader,
-        insertOrUpdate: 'INSERT',
-      });
-    } else {
-      const defaultSheets = {
-        records: ['date', 'field', 'source', 'loads'],
-        fields: ['name', 'boundary'],
-        sources: ['name', 'type', 'max ac/load'],
-        drivers: ['name'],
-      };
-      for (const [sheetName, header] of Object.entries(defaultSheets)) {
-        await batchUpsertRows({
-          id: currentSpreadsheetId,
-          worksheetName: sheetName,
-          rows: [],
-          header,
-          insertOrUpdate: 'INSERT',
-        });
+      info('All worksheets created in new spreadsheet successfully');
+    }
+  } catch(e: any) {
+    snackbarMessage('Error loading spreadsheets from Google Drive:'+ e.message);
+    error('ERROR: ensureManureSheets: failed to ensure sheets.  Error was: ', e);
+  }
+}
+
+// Helper function to populate lineno on all arrays
+function addLineno(a: any[]) {
+  for (const [index, obj] of a.entries()) {
+    obj['lineno'] = index+2;
+  }
+}
+
+//------------------------------------------
+// Fields
+//------------------------------------------
+
+export const fields = action('fields', (fields: Field[]) => {
+  state.fields = fields;
+  // Squash all fields into single geojson for rendering
+  const geojson: FieldGeoJSON = {
+    type: 'FeatureCollection',
+    features: fields.map(field => ({
+      ...field.boundary,
+      properties: { name: field.name },
+    })),
+  };
+  geojsonFields(geojson);
+});
+let _geojsonFields: FeatureCollection<Polygon | MultiPolygon> = { type : 'FeatureCollection', features: [] };
+export const geojsonFields = action('geojsonFields', (gflds?: FeatureCollection<Polygon | MultiPolygon>) => {
+  if (gflds) {
+    _geojsonFields = gflds;
+    state.geojsonFields.rev++;
+  }
+  return _geojsonFields;
+})
+export const loadFields = action('loadFields', async (thisYearSheet: any) => {
+  const flds = thisYearSheet?.fields || { header: [], data: [] };
+  if (!Array.isArray(flds.data)) throw new Error('fields sheet is not an array');
+  addLineno(flds.data);
+  assertFields(flds.data);
+  fields(flds.data);
+});
+
+//-----------------------------
+// Sources
+//-----------------------------
+
+// If google sheets returns numbers, they are strings.  Handy function
+// to just sanitize things to be numbers if they look like numbers
+function stringsToNumbers(arr: any[]) {
+  for (const obj of arr) {
+    if (typeof obj !== 'object') continue;
+    for (const [key, val] of Object.entries(obj)) {
+      if (typeof val ==='string' && val.match(/^[\-\.0-9]+$/)) {
+        const num = parseFloat(val);
+        if (!isNaN(num)) {
+          obj[key] = num;
+        }
       }
     }
   }
-  return currentSpreadsheetId;
 }
+
+export const sources = action('sources', (sources: Source[]) => {
+  state.sources = sources;
+});
+export const loadSources = action('loadSources', async (thisYearSheet: any) => {
+  const srcs = thisYearSheet?.sources || {  header: [], data: [] };
+  if (!Array.isArray(srcs.data)) throw new Error('sources sheet is not an array');
+  // have to turn the acPerLoad into numbers
+  addLineno(srcs.data);
+  stringsToNumbers(srcs.data);
+  assertSources(srcs.data);
+  sources(srcs.data);
+});
+
+//--------------------------------
+// Drivers
+//--------------------------------
+
+export const drivers = action('drivers', (drivers: Driver[]) => {
+  state.drivers = drivers;
+});
+export const loadDrivers = action('loadDrivers', async (thisYearSheet: any) => {
+  const drs = thisYearSheet?.drivers || {  header: [], data: [] };
+  if (!Array.isArray(drs.data)) throw new Error('drivers sheet is not an array');
+  addLineno(drs.data);
+  assertDrivers(drs.data);
+  drivers(drs.data);
+});
+
+//-----------------------------
+// LoadsRecords
+//-----------------------------
+
+export const loads = action('loads', (loadsRecords: LoadsRecord[]) => {
+  state.loads = loadsRecords;
+  // Squash all loads GPS points into a single geojson for rendering
+  const allFeatures: Feature<Point, LoadsRecordGeoJSONProps>[] = [];
+  for (const load of loadsRecords) {
+    const { geojson, ...rest } = load;
+    for (const feature of geojson.features) {
+      allFeatures.push({
+        ...feature,
+        properties: rest, // every point gets all the props from the loadsRecord
+      });
+    }
+  }
+  const geojson: LoadsRecordGeoJSON = {
+    type: 'FeatureCollection',
+    features: allFeatures,
+  };
+  geojsonLoads(geojson);
+});
+let _geojsonLoads: FeatureCollection<Point, LoadsRecordGeoJSONProps> = { type : 'FeatureCollection', features: [] };
+export const geojsonLoads = action('geojsonLoads', (glds?: FeatureCollection<Point, LoadsRecordGeoJSONProps>) => {
+  if (glds) {
+    _geojsonLoads = glds;
+    state.geojsonLoads.rev++;
+  }
+  return _geojsonLoads;
+});
+export const loadLoads = action('loadLoads', async (thisYearSheet: any, lastYearSheet: any) => {
+  const thisYearLoads = thisYearSheet?.loads || {  header: [], data: [] };
+  const lastYearLoads = lastYearSheet?.loads || {  header: [], data: [] };
+  const lds = [ ...thisYearLoads.data,...lastYearLoads.data ];
+  addLineno(lds);
+  assertLoadsRecords(lds);
+  loads(lds);
+});
