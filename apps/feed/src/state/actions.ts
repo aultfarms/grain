@@ -10,9 +10,8 @@ const warn = debug("af/feed:warn");
 const info = debug("af/feed:info");
 
 export const page = action('page', () => {
-  console.log('Hello');
+  console.info('Feed page action invoked');
 });
-
 type PartialFeedRecord = {
   date?: string,
   source?: string,
@@ -159,4 +158,22 @@ export const msg = action('msg', (msg: ActivityMessage) => {
 
 export const closeMsg = action('closeMsg', () => {
   state.msg.open = false;
+});
+
+export const loginWithTrello = action('loginWithTrello', async () => {
+  info('LoginWithTrello: connecting to Trello (may redirect for auth)');
+  await trello();
+});
+
+export const logoutTrello = action('logoutTrello', async () => {
+  try {
+    const client = trellolib.getClient();
+    await client.deauthorize();
+  } catch (e) {
+    warn('Failed to deauthorize Trello', e);
+  } finally {
+    if (typeof window !== 'undefined') {
+      window.location.reload();
+    }
+  }
 });

@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
 import { context } from './state';
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, GeoJSON, FeatureGroup } from 'react-leaflet';
 import { Typography } from '@mui/material';
 import L from 'leaflet';
 import debug from 'debug';
@@ -27,7 +27,6 @@ const MapEvents = () => {
 
   useMapEvents({
     moveend: (e) => {
-      info('Map Moved!  e = ', e);
       const map = e.target;
       const center = map.getCenter();
       const zoom = map.getZoom();
@@ -66,7 +65,7 @@ const MapController = observer(() => {
 });
 
 export const Map = observer(() => {
-  const { state } = React.useContext(context);
+  const { state, actions } = React.useContext(context);
   const l = state.load;
   const todayLoads = state.loads
     .filter(r => r.date === l.date && r.field === l.field && r.source === l.source)
@@ -74,6 +73,16 @@ export const Map = observer(() => {
   const seasonLoads = state.loads
     .filter(r => r.field === l.field && r.source === l.source)
     .reduce((sum, r) => sum + r.loads, 0);
+
+  // Referencing rev so mobx will redraw
+  if (state.geojsonFields.rev === 0) {
+    info('No geojson fields yet');
+  }
+
+  const handleFieldClick = (feature: any) => {
+    const fieldName = feature.properties.name;
+    actions.load({ field: fieldName });
+  };
 
   return (
     <div style={{ position: 'relative' }}>
@@ -91,6 +100,18 @@ export const Map = observer(() => {
         >
           <Popup>You are here</Popup>
         </Marker>
+
+        <GeoJSON
+          data={actions.geojsonFields()}
+          style={(feature) => ({
+            color: feature?.properties.name === state.load.field ? '#00FF00' : '#0000FF', // Red for active, blue for others
+            weight: 2,
+            opacity: 0.9,
+          })}
+          onEachFeature={(feature, layer) => {
+              layer.on('click', () => handleFieldClick(feature));
+            }}
+        />
 
         <MapEvents/>
         <MapController/>

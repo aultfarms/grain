@@ -35,7 +35,7 @@ export const loadsHeaders: (keyof LoadsRecord)[] = [
 export function assertLoadsRecord(o: any): asserts o is LoadsRecord {
   if (!o || typeof o!== 'object') throw new Error('Expected LoadsRecord to be a truthy object');
   if (typeof o.lineno !== 'undefined' && typeof o.lineno !== 'number') throw new Error('Expected LoadsRecord.lineno to be a number if it exists');
-  if (typeof o.date !== 'string') throw new Error('Expected LoadsRecord.date to be a string');
+  if (typeof o.date !== 'string') throw new Error('Expected LoadsRecord.date ('+o.date+') to be a string');
   if (typeof o.field !=='string') throw new Error('Expected LoadsRecord.field to be a string');
   if (typeof o.source!=='string') throw new Error('Expected LoadsRecord.source to be a string');
   if (typeof o.loads!== 'number') throw new Error('Expected LoadsRecord.loads to be a number');
@@ -55,8 +55,9 @@ export function assertLoadsRecord(o: any): asserts o is LoadsRecord {
 };
 export function assertLoadsRecords(o: any): asserts o is LoadsRecord[] {
   if (!o ||!Array.isArray(o)) throw new Error('Expected LoadsRecords to be a truthy array');
-  for (const loadsRecord of o) {
-    assertLoadsRecord(loadsRecord);
+  for (const [index, l] of o.entries()) {
+    try { assertLoadsRecord(l) }
+    catch(e: any) { throw new Error('Expected LoadsRecords['+index+'] to be a LoadRecord: '+e.message) }
   }
 }
 export type LoadsRecordGeoJSONProps = Omit<LoadsRecord,'geojson'>;
@@ -144,6 +145,10 @@ export type State = {
     center: LatLngTuple,
     zoom: number,
   },
+  // Field boundary editing on the map:
+  mode: 'loads' | 'fields',
+  editingField: string,
+  fieldsChanged: boolean,
 
   // Data loaded from sheets
   loads: LoadsRecord[];
@@ -253,6 +258,10 @@ export const state = observable<State>({
   currentGPS,
   gpsMode: 'me',
   mapView,
+  mode: 'loads', // or 'fields'
+  editingField: '',
+  fieldsChanged: false,
+
   loads: [],
   fields: [],
   sources: [],

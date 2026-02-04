@@ -12,11 +12,12 @@ export type State = {
   msg: { open: boolean, text: string },
   errors: string[],
   loading: boolean,
+  trelloAuthorized: boolean,
   feedBoard: FeedBoard | null,
   record: FeedRecord,
   // special stuff for AvailableNumbers
   availableNumbersForCurrentSource: AvailableLoadNumber[],
-  newLoadNumberMode: boolean
+  newLoadNumberMode: boolean,
 };
 
 export const state = observable<State>({
@@ -24,6 +25,7 @@ export const state = observable<State>({
   msg: { open: false, text: '' },
   errors: [],
   loading: true,
+  trelloAuthorized: false,
   feedBoard: null,
   record: {
     date: dayjs().format('YYYY-MM-DD'),

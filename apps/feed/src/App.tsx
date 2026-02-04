@@ -40,9 +40,16 @@ export const App = observer(function App() {
         <NavBar />
         { state.loading
           ? <div className="main">Loading feed board...</div>
-          : !wc
-            ? <div className="main"><span>Something went wrong, board is loaded but there are no web controls...</span></div>
-            : <div className="main">
+          : !state.trelloAuthorized
+            ? <div className="main">
+                <p>You must log in with Trello to use this app.</p>
+                <Button variant="contained" onClick={() => actions.loginWithTrello()}>
+                  Login with Trello
+                </Button>
+              </div>
+            : !wc
+              ? <div className="main"><span>Something went wrong, board is loaded but there are no web controls...</span></div>
+              : <div className="main">
                 <div>
                   <b><u>Add a feed load to Trello:</u></b> (<a href="#" onClick={() => actions.loadFeedBoard()}>Refresh</a>)
                 </div>

@@ -17,27 +17,46 @@ async function waitUntilLoaded(): Promise<void> { return; } // This library is a
 
 //-----------------------------------------------------------------
 let token = '';
-async function authorize(): Promise<void> {
-  info('Authorize started.')
 
+async function loadTokenFromStorageOrHash(): Promise<string> {
   await waitUntilLoaded();
+
   // Check localStorage for existing token
-  token = localStorage.getItem('trello_token') || '';
-  if (token) return;
+  try {
+    token = localStorage.getItem('trello_token') || '';
+  } catch (e) {
+    info('Error reading trello_token from localStorage', e);
+    token = '';
+  }
+  if (token) return token;
 
   // Check if we're getting here as a result of a previous redirect
   // that is now coming back to us with a token
-  const hashParams = new URLSearchParams(window.location.hash.slice(1));
-  token = hashParams.get('token') || '';
-  if (token) {
-    const error = hashParams.get('error') || '';
-    if (error) throw new Error('ERROR: User declined access or other Trello failure.  Error was: '+error);
-    if (token) {
+  const hash = window.location.hash.slice(1);
+  if (!hash) return '';
+
+  const hashParams = new URLSearchParams(hash);
+  const urlToken = hashParams.get('token') || '';
+  const error = hashParams.get('error') || '';
+  if (error) throw new Error('ERROR: User declined access or other Trello failure.  Error was: '+error);
+  if (urlToken) {
+    token = urlToken;
+    try {
       localStorage.setItem('trello_token', token);
-      return;
+    } catch (e) {
+      info('Error writing trello_token to localStorage', e);
     }
-    info('WARNING: window.location.hash (', window.location.hash, ') has token, but it was not valid, retrying redirect.')
+    return token;
   }
+  info('WARNING: window.location.hash (', window.location.hash, ') has token, but it was not valid, retrying redirect.')
+  return '';
+}
+
+async function authorize(): Promise<void> {
+  info('Authorize started.')
+
+  const found = await loadTokenFromStorageOrHash();
+  if (found) return;
 
   const return_url = window.location.href.replace(/#.*$/, '');
   // Redirect browser to Trello authorization endpoint
@@ -57,6 +76,47 @@ async function deauthorize(): Promise<void> {
   localStorage.removeItem('trello_token');
   await waitUntilLoaded();
 };
+
+export async function checkAuthorization(): Promise<boolean> {
+  let currentToken = '';
+  try {
+    currentToken = await loadTokenFromStorageOrHash();
+  } catch (e) {
+    info('checkAuthorization: error while loading Trello token', e);
+    return false;
+  }
+
+  if (!currentToken) return false;
+
+  // Verify the token by making a lightweight call to the Trello API.
+  const url = new URL('https://api.trello.com/1/members/me');
+  url.searchParams.set('key', devKey);
+  url.searchParams.set('token', currentToken);
+
+  try {
+    const resp = await fetch(url.toString(), { method: 'GET' });
+    if (!resp.ok) {
+      info('checkAuthorization: Trello token validation failed with status', resp.status);
+      try {
+        localStorage.removeItem('trello_token');
+      } catch (e) {
+        info('Error clearing invalid trello_token from localStorage', e);
+      }
+      token = '';
+      return false;
+    }
+
+    // Token is valid; keep it in the module-level variable for future
+    // requests made via request().
+    token = currentToken;
+    return true;
+  } catch (e) {
+    info('checkAuthorization: error while validating Trello token', e);
+    // On network or other errors, treat as not authorized but do not
+    // clear any existing token so a later retry can succeed.
+    return false;
+  }
+}
 
 const request: TrelloRequestFunction = async (method, path, params) => {
   await waitUntilLoaded();

@@ -20,8 +20,11 @@
     "@mui/icons-material": "^6.4.6",
     "@mui/material": "^6.4.6",
     "@mui/styled-engine": "^6.4.6",
+    "@react-leaflet/core": "^3.0.0",
     "@tmcw/togeojson": "^6.0.1",
+    "@turf/bbox": "^7.2.0",
     "@turf/boolean-point-in-polygon": "^7.2.0",
+    "@turf/center": "^7.2.0",
     "@turf/helpers": "^7.2.0",
     "@turf/turf": "^7.2.0",
     "@types/geojson": "^7946.0.16",
@@ -30,10 +33,12 @@
     "debug": "^4.4.0",
     "jszip": "^3.10.1",
     "leaflet": "^1.9.4",
+    "leaflet-draw": "^1.0.4",
     "mobx": "^6.13.6",
     "mobx-react-lite": "^4.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-dropzone": "^14.3.8",
     "react-leaflet": "^5.0.0",
     "typescript": "^5.7.3",
     "vite": "^6.2.0"
@@ -41,6 +46,7 @@
   "devDependencies": {
     "@types/debug": "^4",
     "@types/leaflet": "^1",
+    "@types/leaflet-draw": "^1",
     "@types/react": "^19",
     "@types/react-dom": "^19"
   }

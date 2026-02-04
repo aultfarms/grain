@@ -102,3 +102,21 @@ export const msg = action('msg', (msg: ActivityMessage) => {
 export const closeMsg = action('closeMsg', () => {
   state.msg.open = false;
 });
+
+export const loginWithTrello = action('loginWithTrello', async () => {
+  // Trigger Trello auth; if there is no valid token, this may redirect.
+  await trello();
+});
+
+export const logoutTrello = action('logoutTrello', async () => {
+  try {
+    const client = trellolib.getClient();
+    await client.deauthorize();
+  } catch (e) {
+    warn('Failed to deauthorize Trello', e);
+  } finally {
+    if (typeof window !== 'undefined') {
+      window.location.reload();
+    }
+  }
+});

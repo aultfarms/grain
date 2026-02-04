@@ -17,7 +17,7 @@ export const BottomLoadButton = observer(() => {
         zIndex: 1000,
         py: 2, // Increases padding top and bottom for a better touch target
       }}
-      onClick={() => { /* actions.recordLoad() */ }}
+      onClick={actions.plusLoad}
     >
       + Load
     </Button>

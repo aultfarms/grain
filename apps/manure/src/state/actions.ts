@@ -1,4 +1,4 @@
-import { action } from 'mobx';
+import { action, runInAction } from 'mobx';
 import {
   GPS,
   state,
@@ -20,8 +20,11 @@ import { FeatureCollection, Polygon, MultiPolygon, Feature, Point } from 'geojso
 import JSZip from 'jszip';
 import * as toGeoJSON from '@tmcw/togeojson';
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
-import { point, polygon } from '@turf/helpers';
+import bbox from '@turf/bbox';
+import center from '@turf/center';
+import { point } from '@turf/helpers';
 import debug from 'debug';
+import { RowObject } from '@aultfarms/google/dist/sheets';
 
 const info = debug('af/manure:info');
 const warn = debug('af/manure:warn');
@@ -35,85 +38,67 @@ const { ensureSpreadsheet,
 } = sheets;
 const { idFromPath } = drive;
 
-/*
 export const uploadKMZ = action('uploadKMZ', async (file: File) => {
-  try {
-    const currentSheet = await sheetToJson({
-      id: state.currentSheetId,
-      worksheetName: 'fields',
-    });
-    if (!currentSheet) throw new Error('Failed to retrieve fields sheet');
-
-    const header = currentSheet.header;
-    const existingFields = currentSheet.data.map((row, index) => ({
-      ...row,
-      lineno: index + 2,
-    }));
-
-    const newFields = await parseKMZ(file);
-    const updates: any[] = [];
-    const inserts: any[] = [];
-    let nextLineno = existingFields.length + 2;
-    const existingFieldMap = new Map(existingFields.map(f => [f.name, f]));
-
-    for (const newField of newFields) {
-      const existing = existingFieldMap.get(newField.name);
-      if (existing) {
-        updates.push({
-          lineno: existing.lineno,
-          name: newField.name,
-          boundary: newField.boundary,
-        });
-      } else {
-        inserts.push({
-          lineno: nextLineno,
-          name: newField.name,
-          boundary: newField.boundary,
-        });
-        nextLineno++;
-      }
+  const newFields = await parseKMZIntoFields(file);
+  const stateFields = JSON.parse(JSON.stringify(state.fields)) as Field[];
+  for (const field of newFields) {
+    const existing = stateFields.find(f => f.name === field.name);
+    if (existing) {
+      existing.name = field.name;
+      existing.boundary = field.boundary;
+    } else {
+      stateFields.push(field);
     }
-
-    if (updates.length > 0) {
-      await batchUpsertRows({
-        id: state.currentSheetId,
-        worksheetName: 'fields',
-        rows: updates,
-        header,
-        insertOrUpdate: 'UPDATE',
-      });
-    }
-
-    if (inserts.length > 0) {
-      await batchUpsertRows({
-        id: state.currentSheetId,
-        worksheetName: 'fields',
-        rows: inserts,
-        header,
-        insertOrUpdate: 'INSERT',
-      });
-    }
-
-    runInAction(() => {
-      for (const update of updates) {
-        const field = state.currentSheet.fields.find(f => f.name === update.name);
-        if (field) field.boundary = update.boundary as string;
-      }
-      for (const insert of inserts) {
-        state.currentSheet.fields.push({
-          name: insert.name as string,
-          boundary: insert.boundary as string,
-        });
-      }
-      state.isConfigModalOpen = false;
-    });
-
-  } catch (error) {
-    console.error('Error uploading KMZ:', error);
+    fieldsChanged(true); // user has to press save button to push to spreadsheet
+    fields(stateFields);
   }
 });
 
-export async function parseKMZ(file: File): Promise<{ name: string; boundary: string }[]> {
+export const fieldsChanged = action('fieldsChanged', (val: boolean) => {
+  state.fieldsChanged = val;
+});
+
+export const saveFields = action('saveFields', async () => {
+  loading(true);
+  await upsertAllFields(); // fieldsChanged is updated by the loadAllSheets in this function
+  loading(false);
+});
+
+export const upsertAllFields = action('upsertAllFields', async () => {
+  try {
+    const fields = state.fields;
+    const header = defaultHeaders.fields;
+    const rows: RowObject[] = [];
+    // Note: the "1" is to preserve the header in an otherwise empty sheet
+    let next_lineno = state.fields.reduce((max,f) => Math.max(max, f.lineno || 1), 1) + 1;
+
+    for (const field of fields) {
+      const row = {
+        lineno: field.lineno || next_lineno++,
+        name: field.name,
+        boundary: JSON.stringify(field.boundary),
+      }
+      rows.push(row);
+    }
+
+    await batchUpsertRows({
+      id: state.sheetIds.thisYear,
+      worksheetName: 'fields',
+      rows,
+      header,
+      insertOrUpdate: 'UPDATE',
+    });
+    info('Batch upserting fields as these rows: ', rows);
+
+    // Now re-load the entire sheet to grab new fields:
+    await loadAllSheets();
+  } catch (e: any) {
+    info('ERROR: could not upsertFields.  Error was: ', e);
+    snackbarMessage('Error updating fields:'+ e.message);
+  }
+});
+
+export async function parseKMZIntoFields(file: File): Promise<{ name: string; boundary: Field['boundary']}[]> {
   const arrayBuffer = await file.arrayBuffer();
   const zip = await JSZip.loadAsync(arrayBuffer);
   const kmlFile = Object.values(zip.files).find(f => f.name.endsWith('.kml'));
@@ -123,70 +108,72 @@ export async function parseKMZ(file: File): Promise<{ name: string; boundary: st
   const kmlDom = parser.parseFromString(kmlText, 'text/xml');
   const geoJson = toGeoJSON.kml(kmlDom);
   return geoJson.features
-    .filter(feature => feature.geometry?.type === 'Polygon')
+    .filter(feature => feature.geometry?.type === 'Polygon' || feature.geometry?.type === 'MultiPolygon')
     .map(feature => ({
       name: feature.properties?.name || 'Unnamed Field',
-      boundary: JSON.stringify(feature.geometry),
+      boundary: feature as Feature<Polygon | MultiPolygon>,
     }));
 }
 
-
-export const recordLoad = action('recordLoad', async () => {
-  if (!state.selectedField || !state.selectedSource || !state.selectedDriver) {
-    warn('Missing selection for recording load');
+export const fieldName = action('fieldName', (oldName: string, newName: string) => {
+  if (!newName) {
+    snackbarMessage('Field name cannot be empty');
     return;
   }
-  // Grab the GPS coordinates from the browser
-  let coords = { lat: 0, lon: 0 };
-  try {
-    const curcoords = await new Promise<GeolocationPosition>((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject);
-    });
-    coords = {
-      lat: curcoords.coords.latitude,
-      lon: curcoords.coords.longitude,
-    };
-  } catch(e: any) {
-    info('Failed to get GPS coordinates, error was: ', e);
-    info('Using 0,0 as coordinates instead');
+  if (state.fields.find(f => f.name === newName && f.name !== oldName)) {
+    snackbarMessage('Field name already exists');
+    return;
   }
-  let todayRecord = state.records.find(record =>
-    record.date === state.selectedDate
-    && record.field === state.selectedField
-    && record.source === state.selectedSource
-    && record.driver === state.selectedDriver
-  );
-  if (!todayRecord) {
-    todayRecord = {
-      date: state.selectedDate,
-      field: state.selectedField,
-      source: state.selectedSource,
-      loads: 1,
-      driver: state.selectedDriver,
-      geojson: { type: 'FeatureCollection', features: [] },
-    };
-    state.currentSheet.records.push(newRecord);
+  const fieldIndex = state.fields.findIndex(f => f.name === oldName);
+  if (fieldIndex >= 0) {
+    fieldsChanged(true);
+    state.fields[fieldIndex]!.name = newName;
   }
-
-  const header = ['date', 'field', 'source', 'loads'];
-  const rows = state.currentSheet.records.map(record => ({
-    lineno: state.currentSheet.records.indexOf(record) + 2,
-    ...record,
-  }));
-  await batchUpsertRows({
-    id: state.currentSheetId!,
-    worksheetName: 'records',
-    rows,
-    header,
-    insertOrUpdate: 'INSERT',
-  });
-  info('Load recorded:', newRecord);
 });
-*/
 
-//-----------------------------------------------------
-// Things reviewed and verified by Aaron
-//-----------------------------------------------------
+export const fieldBoundary = action('fieldBoundary', (name: string, boundary: Field['boundary']) => {
+  const fieldIndex = state.fields.findIndex(f => f.name === name);
+  if (fieldIndex >= 0) {
+    fieldsChanged(true);
+    state.fields[fieldIndex]!.boundary = boundary;
+  } else {
+    info('WARNING: could not find field with name ', name);
+  }
+});
+
+
+export const plusLoad = action('plusLoad', async () => {
+  runInAction(() => state.load.loads++);
+  return saveLoad();
+});
+
+export const saveLoad = action('saveLoad', async () => {
+  const load = state.load;
+  if (!load.lineno) {
+    snackbarMessage('ERROR: did not have a line number for this load record.  That should not happen.');
+    return;
+  }
+
+  if (!load.date || !load.field ||!load.source ||!load.driver) {
+    snackbarMessage('Cannot record load without a date, field, source, and driver');
+    return;
+  }
+
+  const header = defaultHeaders.loads;
+  const row: RowObject = {
+    ...load,
+    lineno: load.lineno || 2,
+    geojson: JSON.stringify(load.geojson),
+  };
+  await batchUpsertRows({
+    id: state.sheetIds.thisYear,
+    worksheetName: 'loads',
+    rows: [ row ],
+    header,
+    insertOrUpdate: 'UPDATE',
+  });
+  info('Loads record saved: ', row);
+});
 
 //----------------------
 // View
@@ -240,6 +227,31 @@ export const mapView = action('mapView', (map: Partial<State['mapView']>) => {
   }
 });
 
+export const moveMapToField = action('moveMapToField', (fieldName: string) => {
+  const field = state.fields.find(f => f.name === fieldName);
+  if (!field) {
+    snackbarMessage(`Field "${fieldName}" not found`);
+    return;
+  }
+
+  const fieldFeature = field.boundary as Feature<Polygon | MultiPolygon>;
+  const fieldCenter = center(fieldFeature).geometry.coordinates as [number, number];
+  const fieldBbox = bbox(fieldFeature); // [minLng, minLat, maxLng, maxLat]
+
+  // Approximate zoom level based on bounding box size (latitude/longitude span)
+  const latDiff = fieldBbox[3] - fieldBbox[1];
+  const lngDiff = fieldBbox[2] - fieldBbox[0];
+  const maxDiff = Math.max(latDiff, lngDiff);
+  // Rough zoom calculation: adjust these values based on your map's typical size
+  const zoom = Math.min(18, Math.max(10, Math.floor(16 - Math.log2(maxDiff * 100))));
+
+  // Update map view to center on the field with calculated zoom
+  mapView({
+    center: [fieldCenter[1], fieldCenter[0]], // Turf gives [lng, lat], Leaflet needs [lat, lng]
+    zoom,
+  });
+});
+
 export const gpsMode = action('gpsMode', (gpsMode: State['gpsMode']) => {
   state.gpsMode = gpsMode;
   if (gpsMode === 'me') { // switching back to 'me' needs to re-load my coords
@@ -248,6 +260,15 @@ export const gpsMode = action('gpsMode', (gpsMode: State['gpsMode']) => {
     currentGPS({ lat: state.mapView.center[0], lon: state.mapView.center[1] }, true);
   }
 });
+
+export const mode = action('mode', (mode: 'loads' | 'fields') => {
+  state.mode = mode;
+});
+
+export const editingField = action('editingField', (name: string) => {
+  state.editingField = name;
+});
+
 
 //---------------------
 // Loads
@@ -259,6 +280,26 @@ export const load = action('load', (r: Partial<LoadsRecord>) => {
     ...state.load,
     ...r,
   };
+  delete state.load.lineno; // no lineno until we see if this record already exists in the list of known loads
+  const knownLoad = state.loads.find(l =>
+    l.date === state.load.date
+    && l.source === state.load.source
+    && l.field === state.load.field
+    && l.driver === state.load.driver
+  );
+  if (knownLoad) {
+    state.load.lineno = knownLoad.lineno;
+    if (!('loads' in r)) { // If this change is not to the loads count, go ahead and pre-load what's in the existing list as the loads count
+      state.load.loads = knownLoad.loads;
+    }
+  } else {
+    const maxLineno = state.loads.reduce((max, l) => Math.max(max, l.lineno || 1), 1); // the "1" is for the header row
+    state.load.lineno = maxLineno + 1;
+    if (!('loads' in r)) {
+      state.load.loads = 0; // if this makes a new load, initialize it to 0 loads
+    }
+  }
+
   localStorage.setItem('af.manure.loadRecord', JSON.stringify(state.load));
 });
 
@@ -337,6 +378,7 @@ export const loadAllSheets = action('loadAllSheets', async () => {
     await loadSources(thisYearSheet);
     await loadDrivers(thisYearSheet);
     await loadLoads(thisYearSheet, lastYearSheet);
+    fieldsChanged(false); // fields are now in sync w/ spreadsheet
     loading(false);
   } catch(e: any) {
     loadingError('Reload page.  There was an error loading spreadsheets: '+ e.message);
@@ -472,6 +514,12 @@ export const loadFields = action('loadFields', async (thisYearSheet: any) => {
   const flds = thisYearSheet?.fields || { header: [], data: [] };
   if (!Array.isArray(flds.data)) throw new Error('fields sheet is not an array');
   addLineno(flds.data);
+  // Convert all the geojson strings back to objects
+  for (const f of flds.data) {
+    if ('boundary' in f) {
+      f.boundary = JSON.parse(f.boundary);
+    }
+  }
   assertFields(flds.data);
   fields(flds.data);
 });
@@ -560,6 +608,7 @@ export const loadLoads = action('loadLoads', async (thisYearSheet: any, lastYear
   const lastYearLoads = lastYearSheet?.loads || {  header: [], data: [] };
   const lds = [ ...thisYearLoads.data,...lastYearLoads.data ];
   addLineno(lds);
+  stringsToNumbers(lds);
   assertLoadsRecords(lds);
   loads(lds);
 });

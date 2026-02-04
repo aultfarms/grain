@@ -2,7 +2,8 @@ import React from 'react';
 import { observer } from 'mobx-react-lite';
 import { NavBar } from './NavBar';
 import { Map } from './Map';
-import { Form } from './Form';
+import { LoadForm } from './LoadForm';
+import { FieldsForm } from './FieldsForm';
 import { ConfigModal } from './ConfigModal';
 import { BottomLoadButton } from './BottomLoadButton';
 import { LoadingIndicator } from './LoadingIndicator';
@@ -29,7 +30,7 @@ export const App = observer(() => {
                 <Map />
               </div>
               <div className="form-wrapper">
-                <Form />
+                {state.mode === 'loads' ? <LoadForm /> : <FieldsForm />}
               </div>
             </React.Fragment>
         }

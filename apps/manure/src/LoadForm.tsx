@@ -1,13 +1,16 @@
 import React from 'react';
 import { observer } from 'mobx-react-lite';
 import { context } from './state';
-import { Box, IconButton, TextField, Select, MenuItem, FormControl, FormLabel, InputLabel, ToggleButtonGroup, ToggleButton } from '@mui/material';
+import { Typography, Box, IconButton, TextField, Select, MenuItem, FormControl, FormLabel, InputLabel, ToggleButtonGroup, ToggleButton } from '@mui/material';
 import TravelExploreIcon from '@mui/icons-material/TravelExplore';
 
-export const Form = observer(() => {
+export const LoadForm = observer(() => {
   const { state, actions } = React.useContext(context);
   return (
     <Box sx={{ p: 2, width: '100%', height: '100%', boxSizing: 'border-box', bgcolor: '#f5f5f5', overflow: 'auto' }}>
+      <Typography color="secondary" align="center" variant="h6" component="div" gutterBottom>
+        Loads: {state.load.loads}
+      </Typography>
       <TextField
         label="Date"
         type="date"

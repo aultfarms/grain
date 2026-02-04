@@ -39,6 +39,17 @@ async function deauthorize(): Promise<void> {
   client = null;
 };
 
+export async function checkAuthorization(): Promise<boolean> {
+  try {
+    // Simple test call to verify that the dev key + token work.
+    await request('get', '/members/me', { fields: 'id' });
+    return true;
+  } catch (e) {
+    info('checkAuthorization: Trello token validation failed', e);
+    return false;
+  }
+}
+
 
 const request: TrelloRequestFunction = async (method, path, params) => {
   await waitUntilLoaded();

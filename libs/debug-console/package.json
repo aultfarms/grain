@@ -1,0 +1,36 @@
+{
+  "name": "@aultfarms/debug-console",
+  "version": "0.0.1",
+  "description": "Global console wrapper for Ault Farms apps to mirror console output into app state for mobile debugging overlays.",
+  "type": "module",
+  "main": "dist/index.mjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/**/*"
+  ],
+  "scripts": {
+    "build:tsc": "tsc -b",
+    "build:rollup": "rollup --config=rollup.config.js",
+    "build": "yarn build:tsc && yarn build:rollup",
+    "dev:tsc": "tsc -b -w",
+    "dev:rollup": "rollup --config rollup.config.js --watch",
+    "dev": "yarn run build:tsc && concurrently \"yarn run dev:tsc\" \"yarn run dev:rollup\""
+  },
+  "author": "Aaron Ault <aultac@gmail.com>",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^29.0.0",
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "@tsconfig/node16": "^1.0.3",
+    "@types/react": "^18.2.0",
+    "@yarnpkg/sdks": "^3.0.0-rc.42",
+    "concurrently": "^9.2.1",
+    "rollup": "^4.57.0",
+    "typescript": "^5.0.3"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "tslib": "^2.5.0"
+  }
+}

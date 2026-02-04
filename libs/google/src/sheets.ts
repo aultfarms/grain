@@ -22,6 +22,12 @@ export type SpreadsheetInfo = {
   path: string, // original path+filename of the spreadsheet
   worksheetName: string, // name of worksheet in the spreadsheet that you want to read/edit
 }
+export function assertSpreadsheetInfo(o: any): asserts o is SpreadsheetInfo {
+  if (!o || typeof o !== 'object') throw new Error('SpreadsheetInfo must be a truthy object');
+  if (typeof o.id !== 'string') throw new Error('SpreadsheetInfo.id must be a string');
+  if (typeof o.path !== 'string') throw new Error('SpreadsheetInfo.path must be a string');
+  if (typeof o.worksheetName !== 'string') throw new Error('SpreadsheetInfo.worksheetName must be a string');
+}
 
 async function sheets(): Promise<Sheets.Sheets> {
   // @ts-ignore

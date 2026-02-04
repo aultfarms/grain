@@ -12,6 +12,7 @@ export type State = {
   msg: { open: boolean, text: string },
   errors: string[],
   loading: boolean,
+  trelloAuthorized: boolean,
   grainBoard: GrainBoard | null,
   record: GrainRecord,
 };
@@ -21,6 +22,7 @@ export const state = observable<State>({
   msg: { open: false, text: '' },
   errors: [],
   loading: true,
+  trelloAuthorized: false,
   grainBoard: null,
   record: {
     date: dayjs().format('YYYY-MM-DD'),
