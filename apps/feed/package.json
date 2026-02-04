@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:libs": "yarn workspace @aultfarms/trello build && yarn workspace @aultfarms/trucking build",
+    "build:libs": "yarn workspace @aultfarms/debug-console build && yarn workspace @aultfarms/trello build && yarn workspace @aultfarms/trucking build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "predeploy": "yarn run build:libs && yarn run build",
