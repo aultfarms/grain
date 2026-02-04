@@ -31,6 +31,11 @@ export const NavBar = observer(function NavBar() {
     handleMenuClose();
   };
 
+  const handleClearCache = () => {
+    actions.clearLocalStorageCache();
+    handleMenuClose();
+  };
+
   return (
     <AppBar position="static" className="navbar">
       <Container maxWidth="xl">
@@ -77,6 +82,9 @@ export const NavBar = observer(function NavBar() {
           >
             <MenuItem onClick={handleLogoutTrello}>
               <Typography textAlign="center">Logout Trello</Typography>
+            </MenuItem>
+            <MenuItem onClick={handleClearCache}>
+              <Typography textAlign="center">Clear Cache</Typography>
             </MenuItem>
           </Menu>
         </Toolbar>

@@ -49,7 +49,6 @@ export const App = observer(function App() {
     return true; // best match is in fact the one chosen
   }
   const isError = false && !sellerListMatchesDestination(); // figure out how to do this matching sometime
-  info('isError = ', isError);
 
   return (
     <HelmetProvider>
@@ -173,7 +172,7 @@ export const App = observer(function App() {
           }}
           open={state.msg.open}
           message={state.msg.text}
-          autoHideDuration={3000}
+          autoHideDuration={10000}
           onClose={() => actions.closeMsg() }
         />
       </div>

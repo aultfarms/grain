@@ -110,9 +110,9 @@ export function assertGrainRecord(o: any): asserts o is GrainRecord {
   if (typeof o.date !== 'string') throw 'Date must exist and be a string';
   if (typeof o.sellerList !== 'object') throw 'Seller list must exist and be an object';
   if (typeof o.sellerList.name !== 'string') throw 'Seller list name must exist and be a string';
-  if (typeof o.sellerList.id !== 'string') throw 'Seller list id must exist and be a string';
+  if (typeof o.sellerList.idList !== 'string') throw 'Seller list idList must exist and be a string';
   if (typeof o.dest !== 'string') throw 'Destination must exist and be a string';
-  if (typeof o.loadNumber !== 'string') throw 'Load number must exist and be a string';
+  if (typeof o.ticket !== 'string') throw 'Ticket must exist and be a string';
   if (typeof o.bushels !== 'number') throw 'Weight must exist and be a number';
   if (typeof o.ticket !== 'string') throw 'Ticket must exist and be a string';
   if (typeof o.driver !== 'string') throw 'Driver must exist and be a string';

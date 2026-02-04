@@ -1,23 +1,19 @@
 import { state } from './state';
-import { changeRecord, loadGrainBoard, loadFromLocalStorage, trello } from './actions';
+import { changeRecord, loadGrainBoard, loadFromLocalStorage, trello, loading, setTrelloAuthorization } from './actions';
 import debug from 'debug';
 import * as trellolib from '@aultfarms/trello';
 
 const info= debug("af/grain:info");
 
 export const initialize = async () => {
-  // Ensure the `debug` library emits via the patched console.log so
-  // its output is captured by @aultfarms/debug-console.
-  debug.log = (...args: unknown[]) => {
-    console.log(...args);
-  };
+  debug.log = console.log; // ensure debug's log is the log from debug console.
 
   info('Checking Trello authorization');
   const authorized = await trellolib.checkAuthorization();
   if (!authorized) {
     info('Trello not authorized; waiting for user to log in');
-    state.loading = false;
-    (state as any).trelloAuthorized = false;
+    loading(false);
+    setTrelloAuthorization(false);
     return;
   }
 
@@ -36,5 +32,5 @@ export const initialize = async () => {
   if (!state.record.driver) changeRecord({ driver: state.grainBoard?.webControls.settings.drivers[0] || 'UNKNOWN' });
   if (!state.record.crop) changeRecord({ crop: state.grainBoard?.webControls.settings.crops[0] || 'UNKNOWN' });
 
-  (state as any).trelloAuthorized = true;
+  setTrelloAuthorization(true);
 };

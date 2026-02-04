@@ -6,7 +6,7 @@ import dayjs from 'dayjs';
 import {grain, assertGrainRecord, GrainRecord} from '@aultfarms/trucking';
 
 const warn = debug("af/grain:warn");
-//const info = debug("af/grain:info");
+const info = debug("af/grain:info");
 
 export const page = action('page', () => {
   console.log('Hello');
@@ -28,16 +28,26 @@ export const changeRecord = action('changeRecord', (vals: PartialGrainRecord) =>
     ...state.record,
     ...vals
   };
+  // sellerList can have a "records" key that has all the records for that sellerList.  Don't
+  // bother to keep that in the main record.
+  if (vals.sellerList) {
+    const { name, idList } = vals.sellerList;
+    state.record.sellerList = { name, idList };
+  }
 });
 
 export const loadGrainBoard = action('loadGrainBoard', async () => {
-  runInAction(() => state.loading = true);
+  loading(true);
   const client = await trello();
   const gb = await grain.grainBoard({ client });
   runInAction(() => state.grainBoard = gb);
   if (!state.grainBoard) throw new Error('ERROR: somehow grainBoard is not truthy');
 
-  runInAction(() => state.loading = false);
+  loading(false);
+});
+
+export const loading = action('loading', (val: boolean) => {
+  state.loading = val;
 });
 
 export const saveRecord = action('saveRecord', async () => {
@@ -80,18 +90,31 @@ export const resetRecord = action('resetRecord', (prevrecord: GrainRecord) => {
 
 // Keep track of the last thing you saved so it can populate re-used settings
 export const loadFromLocalStorage = action('loadFromLocalStorage', () => {
+  let prevrecord_str: string = '';
+  let prevrecord: GrainRecord | null | unknown = null;
   try {
-    const prevrecord = JSON.parse(localStorage.getItem('grain-prevrecord') || '');
+    prevrecord_str = localStorage.getItem('grain-prevrecord') || '';
+    if (!prevrecord_str) {
+      info('There was no previous record saved in localstorage.  Moving on.');
+      return;
+    }
+    prevrecord = JSON.parse(prevrecord_str);
     assertGrainRecord(prevrecord);
     resetRecord(prevrecord);
-  } catch (e) {
-    warn('Could not parse localStorage["grain-prevrecord"]');
+  } catch (e: any) {
+    warn('Could not parse localStorage["grain-prevrecord"].  Removing previous value which was: ', prevrecord_str, '.  Error was: ', e.toString());
+    clearLocalStorageCache();
     // JSON parse or type assertion failed
   }
 });
 
 export const saveToLocalStorage = action('saveToLocalStorage', () => {
+  info('Saving previous record ', state.record, ' to localstorage');
   localStorage.setItem('grain-prevrecord', JSON.stringify(state.record));
+});
+
+export const clearLocalStorageCache = action('clearLocalStorageCache', () => {
+  localStorage.removeItem('grain-prevrecord');
 });
 
 export const msg = action('msg', (msg: ActivityMessage) => {
@@ -119,4 +142,8 @@ export const logoutTrello = action('logoutTrello', async () => {
       window.location.reload();
     }
   }
+});
+
+export const setTrelloAuthorization = action('setTrelloAuthorization', (val: boolean) => {
+  state.trelloAuthorized = val;
 });
