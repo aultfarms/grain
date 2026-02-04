@@ -135,7 +135,7 @@ export const App = observer(function App() {
           }}
           open={state.msg.open}
           message={state.msg.text}
-          autoHideDuration={3000}
+          autoHideDuration={9000}
           onClose={() => actions.closeMsg() }
         />
       </div>

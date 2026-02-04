@@ -36,6 +36,7 @@ export const changeRecord = action('changeRecord', (vals: PartialFeedRecord) => 
     const allsources = allSourcesFromFullSource(fullsource);
     const available = state.feedBoard?.available.records.filter(a => !!allsources.find(ss => a.name.toUpperCase().match(ss.toUpperCase())));
     state.availableNumbersForCurrentSource = available || [];
+    info('changeRecord: source was included in change, so changing availableNumbersForCurrentSource to be ',state.availableNumbersForCurrentSource);
     // If there are no available load numbers for this source, we need to set the loadNumber to
     // be the source first name and mark the flag for newLoadNumberMode
     if (state.availableNumbersForCurrentSource.length < 1) {
@@ -77,10 +78,10 @@ export const newLoadNumberMode = action('newLoadNumberMode', (newval: boolean, n
   state.newLoadNumberMode = newval;
 });
 
-export const loadFeedBoard = action('loadFeedBoard', async () => {
+export const loadFeedBoard = action('loadFeedBoard', async (force?: true) => {
   runInAction(() => state.loading = true);
   const client = await trello();
-  const fb = await feed.feedBoard({ client });
+  const fb = await feed.feedBoard(force ? { client, force } : { client });
   runInAction(() => state.feedBoard = fb);
   if (!state.feedBoard) throw new Error('ERROR: somehow feedboard is not truthy');
 
@@ -97,10 +98,14 @@ export const saveRecord = action('saveRecord', async () => {
   // it is assumed to be already present in the load number.
   msg({ type: 'good', msg: 'Saving to Trello...'});
   await feed.saveFeedDelivered({ client: await trello(), record: { ...state.record, source: '' } });
+  // Reload feed board since this could have adjusted the source list's available numbers:
   // And save this in state to pre-load old record with next time
   localStorage.setItem('feed-prevrecord', JSON.stringify(state.record));
   // Reset what needs to reset:
   newLoadNumberMode(false);
+  info('Reloading feed board to get new available numbers list');
+  await loadFeedBoard(true); // force full reload
+  info('Resetting record now that new list is loaded');
   resetRecord(state.record);
   msg({type: 'good', msg: 'Saved successfully.'});
 });
