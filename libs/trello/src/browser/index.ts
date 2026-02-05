@@ -46,6 +46,17 @@ async function loadTokenFromStorageOrHash(): Promise<string> {
     } catch (e) {
       info('Error writing trello_token to localStorage', e);
     }
+
+    // Strip the token (and any other fragment) from the URL so it is
+    // not visible in the address bar once we have safely stored it.
+    try {
+      const { origin, pathname, search } = window.location;
+      const cleanUrl = origin + pathname + search;
+      window.history.replaceState(null, document.title, cleanUrl);
+    } catch (e) {
+      info('Error stripping Trello token fragment from URL', e);
+    }
+
     return token;
   }
   info('WARNING: window.location.hash (', window.location.hash, ') has token, but it was not valid, retrying redirect.')
